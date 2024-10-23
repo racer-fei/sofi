@@ -17,15 +17,11 @@ def process_frame(frame, model):
     
     # Normaliza os valores dos pixels para [0, 1]
     frame_normalized = frame_resized / 255.0
-    
-    # Adiciona uma dimensão extra para que o modelo U-Net receba no formato correto
     input_frame = np.expand_dims(frame_normalized, axis=0)
-    
-    # Faz a predição usando a U-Net
     predicted_mask = model.predict(input_frame)
     
     # Remove a dimensão extra e redimensiona a máscara para o tamanho original
-    predicted_mask = predicted_mask.squeeze()
+    predicted_mask = np.squeeze(predicted_mask)
     predicted_mask = cv.resize(predicted_mask, (frame.shape[1], frame.shape[0]))
     
     # Binariza a máscara (converte para 0 e 255)
@@ -33,28 +29,35 @@ def process_frame(frame, model):
     
     # Aplica a máscara à imagem original para destacar as faixas
     output = cv.bitwise_and(frame, frame, mask=predicted_mask)
+    blurred = cv.GaussianBlur(output, (7, 7), 0)
+    edges = cv.Canny(blurred, 75, 150)
     
-    return output, predicted_mask
+    length = 5 
+    gap = 9      
+    lines = cv.HoughLinesP(edges, 1, np.pi / 180, 50, minLineLength=length, maxLineGap=gap)
+    if lines is not None:
+        for line in lines:
+            x1, y1, x2, y2 = line[0]
+            cv.line(frame, (x1, y1), (x2, y2), (0, 255, 0), 3)
 
+    return frame, predicted_mask  # Retorna o frame com as linhas desenhadas
 def main():
     video = cv.VideoCapture("/Users/sofialinheira/Desktop/IC/videos_teste/lane2.mp4")
-
+    
+    if not video.isOpened():  # Verifica se o vídeo foi aberto corretamente
+        print("Erro ao abrir o vídeo.")
+        return
     while True:
         ret, frame = video.read()
-
         if not ret:
             break
 
         output, mask = process_frame(frame, model)
+        cv.imshow("Linhas detectadas", output)
 
-        # Exibir o resultado
-        cv.imshow("Predicted Mask - Lane Detection", output)
-
-        # Sair do loop se a tecla 'q' for pressionada
         if cv.waitKey(1) & 0xFF == ord('q'):
             break
 
-    # Liberar os recursos
     video.release()
     cv.destroyAllWindows()
 
